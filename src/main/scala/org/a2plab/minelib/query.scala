@@ -4,8 +4,6 @@ package minelib
 import java.io.{OutputStream, InputStream}
 import java.net.{InetAddress, DatagramPacket, DatagramSocket}
 import sbinary._
-import sbinary.Input._
-import sbinary.Output._
 import sbinary.Operations._
 
 trait RequestType {
