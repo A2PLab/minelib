@@ -188,7 +188,7 @@ object QueryProtocol {
   }
 }
 
-class StatusClient(val host: String, val port: Int) {
+class QueryClient(val host: String, val port: Int) {
   import QueryProtocol._
 
   def withConnection[T](c: DatagramSocket => T) = {
