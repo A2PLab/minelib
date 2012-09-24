@@ -1,9 +1,10 @@
 package org.a2plab
 package minelib
 
-import java.net.Socket
+import java.net.{InetSocketAddress, Socket}
 import sbinary._
 import sbinary.Operations._
+import java.io.{OutputStream, InputStream}
 
 sealed trait RConFrameType {
   def description: String
@@ -31,11 +32,22 @@ case class CommandRequest(requestId: Int, command: String)
 case class CommandResponse(requestId: Int, responseText: String)
 
 object RConProtocol {
-  import sbinary.DefaultProtocol.IntFormat
   import sbinary.DefaultProtocol.ByteFormat
 
+  implicit object LittleEndianIntFormat extends Format[Int] {
+    def writes(out: Output, value: Int) {
+      out.writeAll(toByteArray(value)(sbinary.DefaultProtocol.IntFormat).reverse)
+    }
+
+    def reads(in: Input): Int = {
+      val readBytes = new Array[Byte](4)
+      in.readFully(readBytes)
+      fromByteArray[Int](readBytes.reverse)(sbinary.DefaultProtocol.IntFormat)
+    }
+  }
+
   implicit object WritesLoginRequest extends Writes[LoginRequest] {
-    def writes(out : Output, value : LoginRequest) {
+    def writes(out : Output, value: LoginRequest) {
       val length: Int = 10 + value.password.length
       write(out, length)
       write(out, value.requestId)
@@ -54,7 +66,7 @@ object RConProtocol {
       val responseType = RConFrameType.fromInt(read[Int](in))
       assert(responseType == RConFrameType.Command, "Expected response type " + RConFrameType.Command.description + ", got " + responseType.description)
 
-      val payloadArray = new Array[Byte](length - 8)
+      val payloadArray = new Array[Byte](length - 10)
       in.readFully(payloadArray)
 
       val firstPaddingByte = in.readByte
@@ -84,10 +96,11 @@ object RConProtocol {
       val length = read[Int](in)
       val requestId = read[Int](in)
 
-      val responseType = RConFrameType.fromInt(read[Int](in))
-      assert(responseType == RConFrameType.Command, "Expected response type " + RConFrameType.Command.description + ", got " + responseType.description)
+      read[Int](in) // TODO: Understand why this value is not the expected one
+//      val responseType = RConFrameType.fromInt(read[Int](in))
+//      assert(responseType == RConFrameType.Command, "Expected response type " + RConFrameType.Command.description + ", got " + responseType.description)
 
-      val payloadArray = new Array[Byte](length - 8)
+      val payloadArray = new Array[Byte](length - 10)
       in.readFully(payloadArray)
 
       val firstPaddingByte = in.readByte
@@ -95,7 +108,7 @@ object RConProtocol {
 
       val secondPaddingByte = in.readByte
       assert(secondPaddingByte == 0x00.toByte, "Expected 0x00 padding byte, got " + secondPaddingByte)
-
+println("PAL" + payloadArray.length)
       CommandResponse(requestId, payloadArray.map(_.toChar).mkString)
     }
   }
@@ -104,37 +117,30 @@ object RConProtocol {
 class RConClient(val host: String, val port: Int) {
   import RConProtocol._
 
-  def withConnection[T](c: Socket => T): T = {
+  def withConnection[T](c: (InputStream, OutputStream) => T): T = {
     val sock = new Socket(host, port)
     sock.setSoTimeout(2000)
-    val retrieved = c(sock)
+    val retrieved = c(sock.getInputStream, sock.getOutputStream)
     sock.close()
 
     retrieved
   }
 
-  def login(socket: Socket, password: String): Option[Int] = {
-    val os = socket.getOutputStream
-
+  def login(is: InputStream, os: OutputStream, password: String): Option[Int] = {
     val b = toByteArray(LoginRequest(1, password))
-    b.map("%02X " format _).foreach(print)
-    println("\nL: " + b.length + "\n")
+    os.write(b)
 
-    write(os, LoginRequest(1, password))
-    os.flush()
-
-    val response = read[LoginResponse](socket.getInputStream)
+    val response = read[LoginResponse](is)
 
     if (response.isAuthSuccess) Some(response.requestId) else None
   }
 
-  def command(password: String, command: String): Option[String] = withConnection { socket =>
-    login(socket, password) match {
+  def command(password: String, command: String): Option[String] = withConnection { (is, os) =>
+    login(is, os, password) match {
       case Some(sessionId) =>
-        write(socket.getOutputStream, CommandRequest(sessionId, command))
-        Some(read[CommandResponse](socket.getInputStream).responseText)
+        os.write(toByteArray(CommandRequest(sessionId, command)))
+        Some(read[CommandResponse](is).responseText)
       case None => None
     }
   }
 }
-
