@@ -96,7 +96,8 @@ object RConProtocol {
       val length = read[Int](in)
       val requestId = read[Int](in)
 
-      read[Int](in) // TODO: Understand why this value is not the expected one
+      read[Int](in)
+      // TODO: Understand why this value is not the expected one
 //      val responseType = RConFrameType.fromInt(read[Int](in))
 //      assert(responseType == RConFrameType.Command, "Expected response type " + RConFrameType.Command.description + ", got " + responseType.description)
 
@@ -108,7 +109,7 @@ object RConProtocol {
 
       val secondPaddingByte = in.readByte
       assert(secondPaddingByte == 0x00.toByte, "Expected 0x00 padding byte, got " + secondPaddingByte)
-println("PAL" + payloadArray.length)
+
       CommandResponse(requestId, payloadArray.map(_.toChar).mkString)
     }
   }
