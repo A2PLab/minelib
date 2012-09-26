@@ -1,7 +1,7 @@
 import sbt._
 import Keys._
 
-object HelloBuild extends Build {
+object MinelibBuild extends Build {
 
   val dependencies = Seq(
     "org.scala-tools.sbinary" % "sbinary_2.9.0" % "0.4.0" withSources ())
